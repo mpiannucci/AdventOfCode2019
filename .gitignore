@@ -1,0 +1,5 @@
+*.o
+zig-cache/
+*.sublime-workspace
+main
+.DS_Store
