@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn main() anyerror!void { 
+pub fn main() anyerror!void {
     const rawFuelData = try std.io.readFileAlloc(std.debug.global_allocator, "input.txt");
     var lines = std.mem.separate(rawFuelData, "\n");
 
