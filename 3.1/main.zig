@@ -97,10 +97,11 @@ const Extents = struct {
     }
 };
 
-pub fn mapPath(map: []u8, map_width: usize, map_height: usize, instructions: std.ArrayList(PathInstruction)) void {
-    var location = Point(usize).init(map_width / 2, map_height / 2);
+pub fn mapPath(map: []u8, map_origin: Point(usize), map_width: usize, map_height: usize, instructions: std.ArrayList(PathInstruction), fill: u8) void {
+    var location = map_origin;
+    const map_size = map_width * map_height;
 
-    for (instructions.toSliceConst()) |instruction| {
+    for (instructions.toSliceConst()) |instruction, iter| {
         const distance = instruction.distance;
 
         var i: usize = 0;
@@ -112,8 +113,22 @@ pub fn mapPath(map: []u8, map_width: usize, map_height: usize, instructions: std
                 'D' => location.y += 1,
                 else => unreachable,
             }
+            const coord = location.y * map_width + location.x;
 
-            map[location.y * map_width + location.x] += 1;
+            if (coord > map_size) {
+                std.debug.warn("OOB at Iteration: {} + {}\n", iter, i);
+                std.debug.warn("Location: {}\n", location);
+                std.debug.warn("Instruction: {}\n", instruction);
+                return;
+            } else {
+                if (map[coord] == 0) {
+                    map[coord] = fill;
+                } else if (map[coord] == fill) {
+                    continue;
+                } else {
+                    map[coord] = 'x';
+                }
+            }
         }
     }
 }
@@ -144,14 +159,22 @@ pub fn main() anyerror!void {
 
     // Before we can create a map of the problem space we have to
     // find the size of the problem space so we can allocate it.
-    var mapExtents = Extents.init();
-    mapExtents.growFromPath(first_wire_path);
-    mapExtents.growFromPath(second_wire_path);
+    var map_extents = Extents.init();
+    map_extents.growFromPath(first_wire_path);
+    map_extents.growFromPath(second_wire_path);
 
     // Now that we know the size of the grid we can allocate it
-    const map_width = @intCast(usize, mapExtents.width());
-    const map_height = @intCast(usize, mapExtents.height());
-    var map = try allocator.alloc(u8, map_width * map_height);
+    const map_width = @intCast(usize, map_extents.width());
+    const map_height = @intCast(usize, map_extents.height());
+    var map = try allocator.alloc(u8, map_width * map_height + 100);
+    const map_origin = Point(usize).init(@intCast(usize, try std.math.absInt(map_extents.min.x)), @intCast(usize, try std.math.absInt(map_extents.min.y)));
+
+    std.debug.warn("Extents: {}\n", map_extents);
+    std.debug.warn("Width: {}\n", map_width);
+    std.debug.warn("Height: {}\n", map_height);
+    std.debug.warn("Origin: {}\n", map_origin);
+
+    std.debug.warn("--------------------------------------------------\n");
 
     // Fill with zeros
     var row: usize = 0;
@@ -163,8 +186,8 @@ pub fn main() anyerror!void {
     }
 
     // Map the wires!!!
-    mapPath(map, map_width, map_height, first_wire_path);
-    mapPath(map, map_width, map_height, second_wire_path);
+    mapPath(map, map_origin, map_width, map_height, first_wire_path, 1);
+    mapPath(map, map_origin, map_width, map_height, second_wire_path, 2);
 
     // Find the overlaps!!
     var intersections = std.ArrayList(Point(usize)).init(allocator);
@@ -172,18 +195,17 @@ pub fn main() anyerror!void {
     while (row < map_height) : (row += 1) {
         var col: usize = 0;
         while (col < map_width) : (col += 1) {
-            if (map[row * map_width + col] == 2) {
+            if (map[row * map_width + col] == 'x') {
                 try intersections.append(Point(usize).init(col, row));
             }
         }
     }
 
     // We can now search for the closest intersection
-    const origin = Point(usize).init(map_width / 2, map_height / 2);
     var min_distance: i64 = MAX_INT;
     var min_index: usize = 0;
     for (intersections.toSliceConst()) |intersection, index| {
-        const distance = intersection.manhattanDistance(origin);
+        const distance = intersection.manhattanDistance(map_origin);
         if (distance < min_distance) {
             min_distance = distance;
             min_index = index;
